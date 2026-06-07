@@ -433,8 +433,6 @@ if can_run:
     log_entries = st.session_state.get("log_entries")
 
     if log_entries is not None:
-
-        # Log
         log_html = ""
         for kind, msg in log_entries:
             cls = f"log-{kind}"
