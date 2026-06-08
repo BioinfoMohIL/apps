@@ -295,26 +295,30 @@ with col2:
 
 
 # ── Helper: read uploaded file ────────────────────────────────────────────────
-@st.cache_data(show_spinner="Reading file…")
+@st.cache_data(show_spinner="Reading file… (this may take a moment on large Excel files)")
 def read_file(file_bytes: bytes, file_name: str):
     """Cached on raw bytes – re-runs never re-parse the same upload."""
     if file_name.lower().endswith(".csv"):
         return pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8-sig")
     else:
-        return pd.read_excel(io.BytesIO(file_bytes), engine="openpyxl")
+        try:
+            return pd.read_excel(io.BytesIO(file_bytes), engine="calamine")
+        except Exception:
+            return pd.read_excel(io.BytesIO(file_bytes), engine="openpyxl")
 
 
 # ── Pipeline function ─────────────────────────────────────────────────────────
-@st.cache_data(show_spinner="Running pipeline…")
-def run_pipeline(samples_df, sites_df, drop_nd, zero_serg):
+@st.cache_data(show_spinner="⏳ Running pipeline… This may take 1–2 minutes on large datasets. Please wait.")
+def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, pestgroup_col="SamplePestGroup"):
     log = []
 
     # Step 1 – filter Phlebotomus
     log.append(('info', f"Step 1 · Raw samples rows: {len(samples_df):,}"))
-    if 'PestGroup' not in samples_df.columns:
-        log.append(('warn', "Column 'PestGroup' not found – skipping filter"))
+    if pestgroup_col and pestgroup_col in samples_df.columns:
+        samples_df = samples_df[samples_df[pestgroup_col].astype(str).str.strip() == 'Phlebotomus'].copy()
+        log.append(('ok', f"Step 1 · Filtered on '{pestgroup_col}' = Phlebotomus"))
     else:
-        samples_df = samples_df[samples_df['PestGroup'].astype(str).str.strip() == 'Phlebotomus'].copy()
+        log.append(('warn', f"Column '{pestgroup_col}' not found – skipping filter"))
     log.append(('ok', f"Step 1 · After Phlebotomus filter: {len(samples_df):,} rows"))
 
     # Step 2 – select fields
@@ -370,14 +374,12 @@ def run_pipeline(samples_df, sites_df, drop_nd, zero_serg):
         log.append(('warn', "Step 6 · Cannot pivot – missing SampleIDMOH or SampleSpecies"))
         return None, log
 
-    pivot = samples_df.groupby(['SampleIDMOH'] + coord_cols + ['SampleSpecies'])['SampleQuantity'] \
-                      .sum().reset_index()
-    wide = pivot.pivot_table(index=['SampleIDMOH'] + coord_cols,
-                              columns='SampleSpecies',
-                              values='SampleQuantity',
-                              aggfunc='sum').reset_index()
+    wide = (samples_df
+            .groupby(['SampleIDMOH'] + coord_cols + ['SampleSpecies'])['SampleQuantity']
+            .sum()
+            .unstack(fill_value=0)
+            .reset_index())
     wide.columns.name = None
-    wide = wide.fillna(0)
     log.append(('ok', f"Step 6 · Pivot done: {len(wide):,} sites × {len(wide.columns):,} columns"))
 
     species_cols = [c for c in wide.columns if c not in ['SampleIDMOH'] + coord_cols]
@@ -421,10 +423,25 @@ if can_run:
 
     st.markdown('<div class="section-title">⚙️ Run Pipeline</div>', unsafe_allow_html=True)
 
+    # PestGroup column selector — narrow width
+    all_cols = list(samples_raw.columns)
+    default_candidates = [c for c in all_cols if 'pestgroup' in c.lower()]
+    default_idx = all_cols.index(default_candidates[0]) if default_candidates else 0
+    sel_col, _ = st.columns([1, 2])
+    with sel_col:
+        pestgroup_col = st.selectbox(
+            "🔎 PestGroup column",
+            options=all_cols,
+            index=default_idx,
+            help="Column containing pest group values (e.g. Phlebotomus)."
+        )
+
+    st.caption("⏱ First run may take 1–2 minutes depending on file size. Subsequent runs are instant.")
     if st.button("▶  RUN PIPELINE"):
         result_df, log_entries = run_pipeline(
             samples_raw, sites_raw,
-            drop_nd=drop_nd_only, zero_serg=zero_sergentomia
+            drop_nd=drop_nd_only, zero_serg=zero_sergentomia,
+            pestgroup_col=pestgroup_col
         )
         st.session_state["result_df"]   = result_df
         st.session_state["log_entries"] = log_entries
@@ -433,6 +450,8 @@ if can_run:
     log_entries = st.session_state.get("log_entries")
 
     if log_entries is not None:
+
+        # Log
         log_html = ""
         for kind, msg in log_entries:
             cls = f"log-{kind}"
@@ -470,17 +489,17 @@ if can_run:
 
             # Download
             st.markdown('<div class="section-title">⬇ Download</div>', unsafe_allow_html=True)
-            col_a, col_b = st.columns(2)
-            with col_a:
-                csv_buf = result_df.to_csv(index=False).encode("utf-8-sig")
-                st.download_button("⬇  Download CSV", csv_buf,
+            csv_buf = result_df.to_csv(index=False).encode("utf-8-sig")
+            xl_buf = io.BytesIO()
+            with pd.ExcelWriter(xl_buf, engine="openpyxl") as writer:
+                result_df.to_excel(writer, index=False, sheet_name="SandflyMatrix")
+            dl1, dl2, _ = st.columns([1, 1, 2])
+            with dl1:
+                st.download_button("⬇ CSV", csv_buf,
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.csv",
                                    mime="text/csv", use_container_width=True)
-            with col_b:
-                xl_buf = io.BytesIO()
-                with pd.ExcelWriter(xl_buf, engine="openpyxl") as writer:
-                    result_df.to_excel(writer, index=False, sheet_name="SandflyMatrix")
-                st.download_button("⬇  Download Excel", xl_buf.getvalue(),
+            with dl2:
+                st.download_button("⬇ Excel", xl_buf.getvalue(),
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    use_container_width=True)
