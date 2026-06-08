@@ -480,12 +480,12 @@ if can_run:
             st.markdown('<div class="section-title">📊 Output Preview</div>', unsafe_allow_html=True)
             tab_a, tab_b = st.tabs(["🗺 Full table", "📈 Species totals"])
             with tab_a:
-                st.dataframe(result_df, use_container_width=True, height=400)
+                st.dataframe(result_df, width='stretch', height=400)
             with tab_b:
                 if sp_cols:
                     totals = result_df[sp_cols].sum().sort_values(ascending=False).reset_index()
                     totals.columns = ['Species','Sites with presence']
-                    st.dataframe(totals, use_container_width=True, height=400)
+                    st.dataframe(totals, width='stretch', height=400)
 
             # Download
             st.markdown('<div class="section-title">⬇ Download</div>', unsafe_allow_html=True)
@@ -497,11 +497,11 @@ if can_run:
             with dl1:
                 st.download_button("⬇ CSV", csv_buf,
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.csv",
-                                   mime="text/csv", use_container_width=True)
+                                   mime="text/csv", width='stretch')
             with dl2:
                 st.download_button("⬇ Excel", xl_buf.getvalue(),
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                   use_container_width=True)
+                                   width='stretch')
         else:
             st.error("Pipeline returned no data. Check your files and column names.")
