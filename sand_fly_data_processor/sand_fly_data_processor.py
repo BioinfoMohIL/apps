@@ -315,7 +315,9 @@ def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, pestgroup_col="Sample
     # Step 1 – filter Phlebotomus
     log.append(('info', f"Step 1 · Raw samples rows: {len(samples_df):,}"))
     if pestgroup_col and pestgroup_col in samples_df.columns:
-        samples_df = samples_df[samples_df[pestgroup_col].astype(str).str.strip() == 'Phlebotomus'].copy()
+        unique_vals = samples_df[pestgroup_col].astype(str).str.strip().unique().tolist()
+        log.append(('info', f"Step 1 · Unique values in '{pestgroup_col}': {str(unique_vals[:10])}{'…' if len(unique_vals)>10 else ''}"))
+        samples_df = samples_df[samples_df[pestgroup_col].astype(str).str.strip().str.replace(r'\s+', ' ', regex=True).str.lower() == 'phlebotomus'].copy()
         log.append(('ok', f"Step 1 · Filtered on '{pestgroup_col}' = Phlebotomus"))
     else:
         log.append(('warn', f"Column '{pestgroup_col}' not found – skipping filter"))
@@ -361,11 +363,13 @@ def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, pestgroup_col="Sample
     # Step 5 – clean species names
     if 'SampleSpecies' in samples_df.columns:
         samples_df['SampleSpecies'] = (samples_df['SampleSpecies']
-            .astype(str).str.strip()
-            .str.replace(r'\s+', ' ', regex=True)
-            .str.title())
+            .astype(str)
+            .str.strip()                              # remove leading/trailing spaces
+            .str.replace(r'\s+', ' ', regex=True))  # collapse multiple spaces into one
         n_species = samples_df['SampleSpecies'].nunique()
+        unique_sp = sorted(samples_df['SampleSpecies'].unique().tolist())
         log.append(('ok', f"Step 5 · Species cleaned; {n_species} unique species"))
+        log.append(('info', f"Step 5 · Species list: {unique_sp[:15]}{'…' if len(unique_sp)>15 else ''}"))
 
     # Step 6 – pivot
     coord_cols = [c for c in ['SamplePointXITM','SamplePointYITM','SiteLatitude','SiteLongitude']
@@ -480,12 +484,12 @@ if can_run:
             st.markdown('<div class="section-title">📊 Output Preview</div>', unsafe_allow_html=True)
             tab_a, tab_b = st.tabs(["🗺 Full table", "📈 Species totals"])
             with tab_a:
-                st.dataframe(result_df, width='stretch', height=400)
+                st.dataframe(result_df, use_container_width=True, height=400)
             with tab_b:
                 if sp_cols:
                     totals = result_df[sp_cols].sum().sort_values(ascending=False).reset_index()
                     totals.columns = ['Species','Sites with presence']
-                    st.dataframe(totals, width='stretch', height=400)
+                    st.dataframe(totals, use_container_width=True, height=400)
 
             # Download
             st.markdown('<div class="section-title">⬇ Download</div>', unsafe_allow_html=True)
@@ -497,11 +501,11 @@ if can_run:
             with dl1:
                 st.download_button("⬇ CSV", csv_buf,
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.csv",
-                                   mime="text/csv", width='stretch')
+                                   mime="text/csv", use_container_width=True)
             with dl2:
                 st.download_button("⬇ Excel", xl_buf.getvalue(),
                                    file_name=f"sandfly_matrix_{datetime.today().strftime('%Y%m%d')}.xlsx",
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                   width='stretch')
+                                   use_container_width=True)
         else:
             st.error("Pipeline returned no data. Check your files and column names.")
