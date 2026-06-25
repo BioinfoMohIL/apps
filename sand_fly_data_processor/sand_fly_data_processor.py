@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import re
 from datetime import datetime
 
 # ── Page config ──────────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
+# ── Custom CSS (UNCHANGED) ────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
@@ -35,12 +36,8 @@ html, body, [class*="css"] {
     color: var(--text);
 }
 
-/* Streamlit app background */
-.stApp {
-    background-color: var(--bg) !important;
-}
+.stApp { background-color: var(--bg) !important; }
 
-/* Sidebar */
 [data-testid="stSidebar"] {
     background: var(--surface) !important;
     border-right: 1px solid var(--border) !important;
@@ -49,11 +46,8 @@ html, body, [class*="css"] {
     font-family: 'Space Mono', monospace;
     color: var(--accent);
 }
-[data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
-    color: var(--text) !important;
-}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] p { color: var(--text) !important; }
 
-/* Main header */
 .hero {
     background: linear-gradient(135deg, #e6f5f0 0%, #f0f7ff 60%, #fef9f6 100%);
     border: 1px solid var(--border);
@@ -81,13 +75,8 @@ html, body, [class*="css"] {
     margin: 0 0 0.4rem 0;
     letter-spacing: -1px;
 }
-.hero p {
-    color: var(--muted);
-    font-size: 1rem;
-    margin: 0;
-}
+.hero p { color: var(--muted); font-size: 1rem; margin: 0; }
 
-/* Step cards */
 .step-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -105,18 +94,9 @@ html, body, [class*="css"] {
     text-transform: uppercase;
     margin-bottom: 0.2rem;
 }
-.step-card .step-title {
-    font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text);
-}
-.step-card .step-desc {
-    color: var(--muted);
-    font-size: 0.85rem;
-    margin-top: 0.2rem;
-}
+.step-card .step-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.step-card .step-desc { color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
 
-/* Metric boxes */
 .metric-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -144,7 +124,6 @@ html, body, [class*="css"] {
     letter-spacing: 1px;
 }
 
-/* Buttons */
 .stButton > button {
     background: var(--accent) !important;
     color: #ffffff !important;
@@ -163,14 +142,12 @@ html, body, [class*="css"] {
     box-shadow: 0 4px 15px rgba(10,124,92,0.25) !important;
 }
 
-/* File uploader */
 [data-testid="stFileUploader"] {
     background: var(--surface) !important;
     border: 1px dashed var(--border) !important;
     border-radius: 10px !important;
 }
 
-/* Tabs */
 .stTabs [data-baseweb="tab-list"] {
     background: var(--surface) !important;
     border-radius: 8px 8px 0 0 !important;
@@ -188,21 +165,13 @@ html, body, [class*="css"] {
     border-bottom: 2px solid var(--accent) !important;
 }
 
-/* Dataframe */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
 }
 
-/* Alerts / info boxes */
-.stSuccess {
-    background: rgba(0,212,170,0.1) !important;
-    border-color: var(--accent) !important;
-}
-.stWarning {
-    background: rgba(255,107,53,0.1) !important;
-    border-color: var(--accent2) !important;
-}
+.stSuccess { background: rgba(0,212,170,0.1) !important; border-color: var(--accent) !important; }
+.stWarning { background: rgba(255,107,53,0.1) !important; border-color: var(--accent2) !important; }
 .info-box {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -213,7 +182,6 @@ html, body, [class*="css"] {
     margin-bottom: 1rem;
 }
 
-/* Section titles */
 .section-title {
     font-family: 'Space Mono', monospace;
     font-size: 0.75rem;
@@ -225,7 +193,6 @@ html, body, [class*="css"] {
     padding-bottom: 0.5rem;
 }
 
-/* Log output */
 .log-box {
     background: #f8fafb;
     border: 1px solid var(--border);
@@ -255,17 +222,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ── Sidebar – pipeline overview ───────────────────────────────────────────────
+# ── Sidebar – pipeline overview (updated to reflect colleague's logic) ────────
 with st.sidebar:
     st.markdown("## Pipeline Steps")
     steps = [
-        ("01", "Filter Phlebotomus", "Keep rows where PestGroup = Phlebotomus"),
+        ("01", "Filter Phlebotomus", "Keep species starting with 'P' + ND rows (by name, not pest-group)"),
         ("02", "Select Fields",      "Species, quantity, ID, date, coords"),
-        ("03", "Join Sites",         "Merge latitude/longitude from sites file"),
-        ("04", "Filter Season & Qty","Remove Nov–Apr & zero-quantity rows"),
-        ("05", "Clean Species Names","Strip spaces, fix duplicates"),
-        ("06", "Pivot Table",        "One row per site, one col per species"),
-        ("07", "Special Cases",      "Sergentomia-only → 0 others; ND-only → drop"),
+        ("03", "Join Sites",         "Merge latitude/longitude from sites file (L0Sites)"),
+        ("04", "Seasonal Filter",    "Remove ONLY winter (Nov–Apr) zero-catch rows; keep summer absences & winter catches"),
+        ("05", "Clean Species Names","Strip spaces, unify 'P.' / 'P ' prefixes"),
+        ("06", "Pivot Table",        "One row per site; coords joined once per site"),
+        ("07", "Special Cases",      "Sergentomyia-only → 0 others; ND-only → drop"),
         ("08", "Binarise",           "Any value > 0 → 1, else → 0"),
     ]
     for num, title, desc in steps:
@@ -279,7 +246,191 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Settings")
     drop_nd_only = st.checkbox("Remove ND-only rows", value=True)
-    zero_sergentomia = st.checkbox("Zero-fill Sergentomia-only rows", value=True)
+    zero_sergentomyia = st.checkbox("Zero-fill Sergentomyia-only rows", value=True)
+
+
+# ── Column canonicalisation ───────────────────────────────────────────────────
+# Maps Hebrew detailed-sheet headers AND the older English 'Sample*' headers
+# onto a single canonical schema used by the pipeline.
+SAMPLE_ALIASES = {
+    "מין": "Species", "species": "Species", "samplespecies": "Species",
+    "מספר פרטים": "SampleQuantity", "samplequantity": "SampleQuantity", "quantity": "SampleQuantity",
+    "מזהה נקודה": "IDMOH", "idmoh": "IDMOH", "sampleidmoh": "IDMOH",
+    "תאריך ביקור": "SampleVisitDate", "samplevisitdate": "SampleVisitDate", "visitdate": "SampleVisitDate",
+    "point x itm": "PointXITM", "pointxitm": "PointXITM", "samplepointxitm": "PointXITM",
+    "point y itm": "PointYITM", "pointyitm": "PointYITM", "samplepointyitm": "PointYITM",
+}
+SITE_ALIASES = {
+    "siteidmoh": "SiteIDMOH", "idmoh": "SiteIDMOH",
+    "sitelatitude": "SiteLatitude", "latitude": "SiteLatitude", "lat": "SiteLatitude",
+    "sitelongitude": "SiteLongitude", "longitude": "SiteLongitude", "lon": "SiteLongitude", "lng": "SiteLongitude",
+}
+
+
+def _norm(col: str) -> str:
+    """Normalise a header for alias matching: drop '*', collapse spaces, lower-case."""
+    s = str(col).strip()
+    s = s.replace("*", "")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s.lower()
+
+
+def detect_map(raw_cols, aliases):
+    """Return {raw_col: canonical} for columns whose normalised header is a known alias."""
+    out = {}
+    for c in raw_cols:
+        canon = aliases.get(_norm(c))
+        if canon and canon not in out.values():
+            out[c] = canon
+    return out
+
+
+# ── File helpers ──────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def get_sheet_names(file_bytes: bytes, file_name: str):
+    if file_name.lower().endswith(".csv"):
+        return None
+    try:
+        return pd.ExcelFile(io.BytesIO(file_bytes), engine="calamine").sheet_names
+    except Exception:
+        return pd.ExcelFile(io.BytesIO(file_bytes), engine="openpyxl").sheet_names
+
+
+@st.cache_data(show_spinner="Reading file… (this may take a moment on large Excel files)")
+def read_file(file_bytes: bytes, file_name: str, sheet_name=None):
+    """Cached on raw bytes – re-runs never re-parse the same upload."""
+    if file_name.lower().endswith(".csv"):
+        return pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8-sig")
+    sheet = sheet_name if sheet_name is not None else 0
+    try:
+        return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet, engine="calamine")
+    except Exception:
+        return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet, engine="openpyxl")
+
+
+# ── Pipeline function (colleague's logic) ─────────────────────────────────────
+@st.cache_data(show_spinner="⏳ Running pipeline… This may take 1–2 minutes on large datasets. Please wait.")
+def run_pipeline(samples_df, sites_df, drop_nd, zero_serg):
+    """
+    Implements the validated SDM-prep logic:
+      - Phlebotomus kept by SPECIES NAME (starts with 'P ' / 'P.') + ND rows
+      - Seasonal filter removes ONLY winter-zero rows (keeps summer absences
+        and winter catches — essential for presence/absence SDM)
+      - Pivot by site ID only; coordinates attached once per site
+    Expects canonical column names: Species, SampleQuantity, IDMOH,
+    SampleVisitDate, PointXITM, PointYITM (samples) and
+    SiteIDMOH, SiteLatitude, SiteLongitude (sites).
+    """
+    log = []
+    df = samples_df.copy()
+
+    # Step 1 – keep Phlebotomus (by species name) + ND
+    log.append(('info', f"Step 1 · Raw samples rows: {len(df):,}"))
+    if 'Species' not in df.columns:
+        log.append(('warn', "Step 1 · No 'Species' column – cannot filter"))
+        return None, log
+    sp = df['Species'].astype(str)
+    mask_phlebo = (
+        sp.str.startswith("P ") |
+        sp.str.startswith("P.") |
+        sp.str.strip().eq("ND")
+    )
+    df = df[mask_phlebo].copy()
+    log.append(('ok', f"Step 1 · Kept species starting with 'P' + ND: {len(df):,} rows"))
+
+    # Step 2 – select fields
+    keep = ['Species', 'SampleQuantity', 'IDMOH', 'SampleVisitDate', 'PointXITM', 'PointYITM']
+    missing = [c for c in keep if c not in df.columns]
+    if missing:
+        log.append(('warn', f"Step 2 · Missing columns (skipped): {missing}"))
+    keep = [c for c in keep if c in df.columns]
+    df = df[keep].copy()
+    log.append(('ok', f"Step 2 · Selected {len(keep)} columns"))
+
+    # Step 3 – join sites (coords)
+    site_cols = [c for c in ['SiteIDMOH', 'SiteLatitude', 'SiteLongitude'] if c in sites_df.columns]
+    if 'SiteIDMOH' in site_cols and 'IDMOH' in df.columns:
+        sites_sub = sites_df[site_cols].drop_duplicates('SiteIDMOH')
+        df = df.merge(sites_sub, left_on='IDMOH', right_on='SiteIDMOH', how='left')
+        n_missing = df['SiteLatitude'].isna().sum() if 'SiteLatitude' in df.columns else 0
+        log.append(('ok', f"Step 3 · Joined sites; {n_missing:,} rows without coordinate match"))
+    else:
+        log.append(('warn', "Step 3 · Could not join sites – check SiteIDMOH / IDMOH columns"))
+
+    # Step 4 – SEASONAL filter: remove ONLY winter-zero rows
+    if 'SampleQuantity' in df.columns:
+        df['SampleQuantity'] = pd.to_numeric(df['SampleQuantity'], errors='coerce')
+    if 'SampleVisitDate' in df.columns:
+        df['SampleVisitDate'] = pd.to_datetime(df['SampleVisitDate'], errors='coerce')
+        winter = [11, 12, 1, 2, 3, 4]
+        month = df['SampleVisitDate'].dt.month
+        qty0 = df['SampleQuantity'].fillna(0) if 'SampleQuantity' in df.columns else 0
+        is_winter_zero = month.isin(winter) & (qty0 == 0)
+        before = len(df)
+        df = df[~is_winter_zero].copy()
+        log.append(('ok', f"Step 4 · Removed winter (Nov–Apr) zero-catch rows: {before - len(df):,} dropped"))
+        log.append(('info', "Step 4 · Summer absences and winter catches were KEPT"))
+    else:
+        log.append(('warn', "Step 4 · No date column – seasonal filter skipped"))
+    log.append(('info', f"Step 4 · Remaining rows: {len(df):,}"))
+
+    # Step 5 – clean species names
+    def clean_species(name):
+        if pd.isna(name):
+            return name
+        name = str(name).strip()
+        name = re.sub(r'\s+', ' ', name)        # collapse multiple spaces
+        name = re.sub(r'^P\.?\s*', 'P ', name)  # unify "P." / "P" prefix to "P "
+        return name
+    df['Species'] = df['Species'].apply(clean_species)
+    uniq = sorted([str(x) for x in df['Species'].dropna().unique()])
+    log.append(('ok', f"Step 5 · Species cleaned; {len(uniq)} unique"))
+    log.append(('info', f"Step 5 · Species: {uniq[:15]}{'…' if len(uniq) > 15 else ''}"))
+
+    # Step 6 – pivot by SITE only, attach coords once per site
+    if 'IDMOH' not in df.columns:
+        log.append(('warn', "Step 6 · Cannot pivot – missing IDMOH"))
+        return None, log
+    coord_cols = [c for c in ['PointXITM', 'PointYITM', 'SiteLatitude', 'SiteLongitude'] if c in df.columns]
+    coords = (df[['IDMOH'] + coord_cols]
+              .drop_duplicates(subset='IDMOH')
+              .set_index('IDMOH'))
+    pivot = (df.groupby(['IDMOH', 'Species'])['SampleQuantity']
+               .sum()
+               .unstack(fill_value=0))
+    result = coords.join(pivot, how='left').reset_index()
+    result.columns.name = None
+    log.append(('ok', f"Step 6 · Pivot done: {len(result):,} sites × {len(result.columns):,} columns"))
+
+    fixed_cols = ['IDMOH'] + coord_cols
+    species_cols = [c for c in result.columns if c not in fixed_cols]
+
+    # Step 7 – special cases
+    serg_cols = [c for c in species_cols if 'sergent' in str(c).lower()]
+    nd_cols   = [c for c in species_cols if str(c).strip().upper() == 'ND']
+    phlebo_cols = [c for c in species_cols if c not in serg_cols + nd_cols]
+
+    if zero_serg and serg_cols and phlebo_cols:
+        mask = (result[serg_cols].sum(axis=1) > 0) & (result[phlebo_cols].sum(axis=1) == 0)
+        result.loc[mask, phlebo_cols] = 0
+        log.append(('ok', f"Step 7 · Sergentomyia-only rows zeroed: {int(mask.sum()):,}"))
+
+    if drop_nd and nd_cols and phlebo_cols:
+        nd_only = (result[nd_cols].sum(axis=1) > 0) & (result[phlebo_cols].sum(axis=1) == 0)
+        if serg_cols:
+            nd_only = nd_only & (result[serg_cols].sum(axis=1) == 0)
+        result = result[~nd_only].copy()
+        log.append(('ok', f"Step 7 · ND-only rows dropped: {int(nd_only.sum()):,}"))
+
+    # Step 8 – binarise
+    species_cols = [c for c in result.columns if c not in fixed_cols]
+    result[species_cols] = (result[species_cols] > 0).astype(int)
+    log.append(('ok', f"Step 8 · Binarised: {len(result):,} sites, {len(species_cols):,} species columns"))
+
+    # Step 9 – order columns (coords first, then species A→Z)
+    result = result[fixed_cols + sorted(species_cols)]
+
+    return result, log
 
 
 # ── File upload ───────────────────────────────────────────────────────────────
@@ -287,132 +438,14 @@ st.markdown('<div class="section-title">📂 Upload Source Files</div>', unsafe_
 
 col1, col2 = st.columns(2)
 with col1:
-    st.markdown("**Samples file** — `backup_samples`")
-    samples_file = st.file_uploader("Upload samples (Excel or CSV)", type=["xlsx","xls","csv"], key="samples")
+    st.markdown("**Samples file** — detailed sheet with dates")
+    samples_file = st.file_uploader("Upload samples (Excel or CSV)", type=["xlsx", "xls", "csv"], key="samples")
 with col2:
     st.markdown("**Sites file** — `backup_sites`")
-    sites_file   = st.file_uploader("Upload sites (Excel or CSV)",   type=["xlsx","xls","csv"], key="sites")
+    sites_file = st.file_uploader("Upload sites (Excel or CSV)", type=["xlsx", "xls", "csv"], key="sites")
 
 
-# ── Helper: read uploaded file ────────────────────────────────────────────────
-@st.cache_data(show_spinner="Reading file… (this may take a moment on large Excel files)")
-def read_file(file_bytes: bytes, file_name: str):
-    """Cached on raw bytes – re-runs never re-parse the same upload."""
-    if file_name.lower().endswith(".csv"):
-        return pd.read_csv(io.BytesIO(file_bytes), encoding="utf-8-sig")
-    else:
-        try:
-            return pd.read_excel(io.BytesIO(file_bytes), engine="calamine")
-        except Exception:
-            return pd.read_excel(io.BytesIO(file_bytes), engine="openpyxl")
-
-
-# ── Pipeline function ─────────────────────────────────────────────────────────
-@st.cache_data(show_spinner="⏳ Running pipeline… This may take 1–2 minutes on large datasets. Please wait.")
-def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, pestgroup_col="SamplePestGroup"):
-    log = []
-
-    # Step 1 – filter Phlebotomus
-    log.append(('info', f"Step 1 · Raw samples rows: {len(samples_df):,}"))
-    if pestgroup_col and pestgroup_col in samples_df.columns:
-        unique_vals = samples_df[pestgroup_col].astype(str).str.strip().unique().tolist()
-        log.append(('info', f"Step 1 · Unique values in '{pestgroup_col}': {str(unique_vals[:10])}{'…' if len(unique_vals)>10 else ''}"))
-        samples_df = samples_df[samples_df[pestgroup_col].astype(str).str.strip().str.replace(r'\s+', ' ', regex=True).str.lower() == 'phlebotomus'].copy()
-        log.append(('ok', f"Step 1 · Filtered on '{pestgroup_col}' = Phlebotomus"))
-    else:
-        log.append(('warn', f"Column '{pestgroup_col}' not found – skipping filter"))
-    log.append(('ok', f"Step 1 · After Phlebotomus filter: {len(samples_df):,} rows"))
-
-    # Step 2 – select fields
-    keep = ['SampleSpecies','SampleQuantity','SampleIDMOH','SampleVisitDate',
-            'SamplePointXITM','SamplePointYITM']
-    missing = [c for c in keep if c not in samples_df.columns]
-    if missing:
-        log.append(('warn', f"Step 2 · Missing columns (will be skipped): {missing}"))
-    keep = [c for c in keep if c in samples_df.columns]
-    samples_df = samples_df[keep].copy()
-    log.append(('ok', f"Step 2 · Selected {len(keep)} columns"))
-
-    # Step 3 – join sites
-    site_cols = ['SiteIDMOH','SiteLatitude','SiteLongitude']
-    available = [c for c in site_cols if c in sites_df.columns]
-    if 'SiteIDMOH' in available and 'SampleIDMOH' in samples_df.columns:
-        sites_sub = sites_df[available].drop_duplicates('SiteIDMOH')
-        before = len(samples_df)
-        samples_df = samples_df.merge(sites_sub, left_on='SampleIDMOH', right_on='SiteIDMOH', how='left')
-        log.append(('ok', f"Step 3 · Joined sites; {len(samples_df):,} rows (was {before:,})"))
-    else:
-        log.append(('warn', "Step 3 · Could not join sites – check SiteIDMOH / SampleIDMOH columns"))
-
-    # Step 4 – filter quantity & season
-    if 'SampleQuantity' in samples_df.columns:
-        samples_df['SampleQuantity'] = pd.to_numeric(samples_df['SampleQuantity'], errors='coerce').fillna(0)
-        before = len(samples_df)
-        samples_df = samples_df[samples_df['SampleQuantity'] > 0]
-        log.append(('ok', f"Step 4 · Removed zero-quantity rows: {before - len(samples_df):,} dropped"))
-
-    if 'SampleVisitDate' in samples_df.columns:
-        samples_df['SampleVisitDate'] = pd.to_datetime(samples_df['SampleVisitDate'], errors='coerce')
-        before = len(samples_df)
-        off_season = [11, 12, 1, 2, 3, 4]
-        samples_df = samples_df[~samples_df['SampleVisitDate'].dt.month.isin(off_season)]
-        log.append(('ok', f"Step 4 · Removed off-season (Nov–Apr): {before - len(samples_df):,} dropped"))
-
-    log.append(('info', f"Step 4 · Remaining rows: {len(samples_df):,}"))
-
-    # Step 5 – clean species names
-    if 'SampleSpecies' in samples_df.columns:
-        samples_df['SampleSpecies'] = (samples_df['SampleSpecies']
-            .astype(str)
-            .str.strip()                              # remove leading/trailing spaces
-            .str.replace(r'\s+', ' ', regex=True))  # collapse multiple spaces into one
-        n_species = samples_df['SampleSpecies'].nunique()
-        unique_sp = sorted([str(x) for x in samples_df['SampleSpecies'].dropna().unique()])
-        log.append(('ok', f"Step 5 · Species cleaned; {n_species} unique species"))
-        log.append(('info', f"Step 5 · Species list: {unique_sp[:15]}{'…' if len(unique_sp)>15 else ''}"))
-
-    # Step 6 – pivot
-    coord_cols = [c for c in ['SamplePointXITM','SamplePointYITM','SiteLatitude','SiteLongitude']
-                  if c in samples_df.columns]
-    if 'SampleIDMOH' not in samples_df.columns or 'SampleSpecies' not in samples_df.columns:
-        log.append(('warn', "Step 6 · Cannot pivot – missing SampleIDMOH or SampleSpecies"))
-        return None, log
-
-    wide = (samples_df
-            .groupby(['SampleIDMOH'] + coord_cols + ['SampleSpecies'])['SampleQuantity']
-            .sum()
-            .unstack(fill_value=0)
-            .reset_index())
-    wide.columns.name = None
-    log.append(('ok', f"Step 6 · Pivot done: {len(wide):,} sites × {len(wide.columns):,} columns"))
-
-    species_cols = [c for c in wide.columns if c not in ['SampleIDMOH'] + coord_cols]
-
-    # Step 7 – special cases
-    serg_cols = [c for c in species_cols if 'Sergentomia' in c]
-    nd_cols   = [c for c in species_cols if c.upper() == 'ND' or c.lower() == 'nd']
-    other_sp  = [c for c in species_cols if c not in serg_cols + nd_cols]
-
-    if zero_serg and serg_cols and other_sp:
-        mask_serg_only = (wide[serg_cols].sum(axis=1) > 0) & (wide[other_sp].sum(axis=1) == 0)
-        wide.loc[mask_serg_only, other_sp] = 0
-        log.append(('ok', f"Step 7 · Sergentomia-only rows zeroed: {mask_serg_only.sum():,}"))
-
-    if drop_nd and nd_cols and other_sp + serg_cols:
-        mask_nd_only = (wide[nd_cols].sum(axis=1) > 0) & (wide[other_sp + serg_cols].sum(axis=1) == 0)
-        wide = wide[~mask_nd_only]
-        log.append(('ok', f"Step 7 · ND-only rows dropped: {mask_nd_only.sum():,}"))
-
-    # Step 8 – binarise
-    for c in species_cols:
-        if c in wide.columns:
-            wide[c] = (wide[c] > 0).astype(int)
-    log.append(('ok', f"Step 8 · Binarised: {len(wide):,} sites, {len(species_cols):,} species"))
-
-    return wide, log
-
-
-# ── Run button & output ───────────────────────────────────────────────────────
+# ── Run section ───────────────────────────────────────────────────────────────
 can_run = samples_file is not None and sites_file is not None
 
 if not can_run:
@@ -422,30 +455,61 @@ if not can_run:
     </div>""", unsafe_allow_html=True)
 
 if can_run:
-    samples_raw = read_file(samples_file.getvalue(), samples_file.name)
-    sites_raw   = read_file(sites_file.getvalue(), sites_file.name)
+    # Sheet selection (Excel only)
+    samples_sheets = get_sheet_names(samples_file.getvalue(), samples_file.name)
+    sites_sheets   = get_sheet_names(sites_file.getvalue(), sites_file.name)
 
-    st.markdown('<div class="section-title">⚙️ Run Pipeline</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📑 Sheet & Column Setup</div>', unsafe_allow_html=True)
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        if samples_sheets:
+            s_default = samples_sheets.index("Sheet1") if "Sheet1" in samples_sheets else 0
+            samples_sheet = st.selectbox("Samples sheet", samples_sheets, index=s_default)
+        else:
+            samples_sheet = None
+    with sc2:
+        if sites_sheets:
+            t_default = sites_sheets.index("L0Sites") if "L0Sites" in sites_sheets else 0
+            sites_sheet = st.selectbox("Sites sheet", sites_sheets, index=t_default)
+        else:
+            sites_sheet = None
 
-    # PestGroup column selector — narrow width
-    all_cols = list(samples_raw.columns)
-    default_candidates = [c for c in all_cols if 'pestgroup' in c.lower()]
-    default_idx = all_cols.index(default_candidates[0]) if default_candidates else 0
+    samples_raw = read_file(samples_file.getvalue(), samples_file.name, samples_sheet)
+    sites_raw   = read_file(sites_file.getvalue(), sites_file.name, sites_sheet)
+
+    # Auto-detect column mapping
+    smap = detect_map(list(samples_raw.columns), SAMPLE_ALIASES)
+    tmap = detect_map(list(sites_raw.columns), SITE_ALIASES)
+
+    # Let user confirm the Species column (the whole filter depends on it)
+    raw_cols = list(samples_raw.columns)
+    species_guess = [r for r, c in smap.items() if c == 'Species']
+    sp_default = raw_cols.index(species_guess[0]) if species_guess else 0
     sel_col, _ = st.columns([1, 2])
     with sel_col:
-        pestgroup_col = st.selectbox(
-            "🔎 PestGroup column",
-            options=all_cols,
-            index=default_idx,
-            help="Column containing pest group values (e.g. Phlebotomus)."
+        species_choice = st.selectbox(
+            "🔎 Species column",
+            options=raw_cols,
+            index=sp_default,
+            help="Column holding species names (Phlebotomus filter keys off this)."
         )
 
+    # Build final rename maps (force chosen species column → 'Species')
+    sample_rename = {r: c for r, c in smap.items() if c != 'Species'}
+    sample_rename[species_choice] = 'Species'
+    samples_canon = samples_raw.rename(columns=sample_rename)
+    sites_canon   = sites_raw.rename(columns=tmap)
+
+    # Show detected mapping
+    detected = ", ".join(f"{c} ← {r}" for r, c in sample_rename.items())
+    st.markdown(f'<div class="info-box">🧭 Detected columns: {detected}</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">⚙️ Run Pipeline</div>', unsafe_allow_html=True)
     st.caption("⏱ First run may take 1–2 minutes depending on file size. Subsequent runs are instant.")
     if st.button("▶  RUN PIPELINE"):
         result_df, log_entries = run_pipeline(
-            samples_raw, sites_raw,
-            drop_nd=drop_nd_only, zero_serg=zero_sergentomia,
-            pestgroup_col=pestgroup_col
+            samples_canon, sites_canon,
+            drop_nd=drop_nd_only, zero_serg=zero_sergentomyia,
         )
         st.session_state["result_df"]   = result_df
         st.session_state["log_entries"] = log_entries
@@ -454,22 +518,20 @@ if can_run:
     log_entries = st.session_state.get("log_entries")
 
     if log_entries is not None:
-
         # Log
         log_html = ""
         for kind, msg in log_entries:
             cls = f"log-{kind}"
-            prefix = {"ok":"✔","warn":"⚠","info":"ℹ"}[kind]
+            prefix = {"ok": "✔", "warn": "⚠", "info": "ℹ"}[kind]
             log_html += f'<div class="{cls}">{prefix}  {msg}</div>'
         st.markdown(f'<div class="log-box">{log_html}</div>', unsafe_allow_html=True)
 
         if result_df is not None and len(result_df) > 0:
             st.success(f"✅ Pipeline complete — {len(result_df):,} sites, {len(result_df.columns):,} columns")
 
-            # Metrics
             meta_cols = [c for c in result_df.columns if c in
-                         ['SampleIDMOH','SamplePointXITM','SamplePointYITM','SiteLatitude','SiteLongitude']]
-            sp_cols  = [c for c in result_df.columns if c not in meta_cols]
+                         ['IDMOH', 'PointXITM', 'PointYITM', 'SiteLatitude', 'SiteLongitude']]
+            sp_cols = [c for c in result_df.columns if c not in meta_cols]
             n_presence = int(result_df[sp_cols].sum().sum()) if sp_cols else 0
 
             st.markdown(f"""
@@ -480,7 +542,6 @@ if can_run:
               <div class="metric-box"><div class="val">{round(n_presence/max(len(result_df)*len(sp_cols),1)*100,1)}%</div><div class="lbl">Occupancy</div></div>
             </div>""", unsafe_allow_html=True)
 
-            # Output preview
             st.markdown('<div class="section-title">📊 Output Preview</div>', unsafe_allow_html=True)
             tab_a, tab_b = st.tabs(["🗺 Full table", "📈 Species totals"])
             with tab_a:
@@ -488,10 +549,9 @@ if can_run:
             with tab_b:
                 if sp_cols:
                     totals = result_df[sp_cols].sum().sort_values(ascending=False).reset_index()
-                    totals.columns = ['Species','Sites with presence']
+                    totals.columns = ['Species', 'Sites with presence']
                     st.dataframe(totals, use_container_width=True, height=400)
 
-            # Download
             st.markdown('<div class="section-title">⬇ Download</div>', unsafe_allow_html=True)
             csv_buf = result_df.to_csv(index=False).encode("utf-8-sig")
             xl_buf = io.BytesIO()
@@ -508,4 +568,4 @@ if can_run:
                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                    use_container_width=True)
         else:
-            st.error("Pipeline returned no data. Check your files and column names.")
+            st.error("Pipeline returned no data. Check your files, sheet, and column mapping.")
