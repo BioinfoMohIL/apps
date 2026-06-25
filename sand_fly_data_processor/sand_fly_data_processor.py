@@ -367,7 +367,7 @@ def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, pestgroup_col="Sample
             .str.strip()                              # remove leading/trailing spaces
             .str.replace(r'\s+', ' ', regex=True))  # collapse multiple spaces into one
         n_species = samples_df['SampleSpecies'].nunique()
-        unique_sp = sorted(samples_df['SampleSpecies'].unique().tolist())
+        unique_sp = sorted([str(x) for x in samples_df['SampleSpecies'].dropna().unique()])
         log.append(('ok', f"Step 5 · Species cleaned; {n_species} unique species"))
         log.append(('info', f"Step 5 · Species list: {unique_sp[:15]}{'…' if len(unique_sp)>15 else ''}"))
 
