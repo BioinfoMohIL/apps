@@ -226,7 +226,7 @@ st.markdown("""
 with st.sidebar:
     st.markdown("## Pipeline Steps")
     steps = [
-        ("01", "Filter Phlebotomus", "Keep species starting with 'P' + ND rows (by name, not pest-group)"),
+        ("01", "Filter Phlebotomus", "Keep PestGroup = Phlebotomus (+ ND); or species-name fallback"),
         ("02", "Select Fields",      "Species, quantity, ID, date, coords"),
         ("03", "Join Sites",         "Merge latitude/longitude from sites file (L0Sites)"),
         ("04", "Seasonal Filter",    "Remove ONLY winter (Nov–Apr) zero-catch rows; keep summer absences & winter catches"),
@@ -310,33 +310,52 @@ def read_file(file_bytes: bytes, file_name: str, sheet_name=None):
 
 # ── Pipeline function (colleague's logic) ─────────────────────────────────────
 @st.cache_data(show_spinner="⏳ Running pipeline… This may take 1–2 minutes on large datasets. Please wait.")
-def run_pipeline(samples_df, sites_df, drop_nd, zero_serg):
+def run_pipeline(samples_df, sites_df, drop_nd, zero_serg, group_col=None):
     """
     Implements the validated SDM-prep logic:
-      - Phlebotomus kept by SPECIES NAME (starts with 'P ' / 'P.') + ND rows
+      - Phlebotomus kept by PEST-GROUP column (== Phlebotomus) when one is
+        provided (e.g. SamplePestGroup); otherwise by SPECIES NAME
+        (starts with 'P ' / 'P.'). ND rows are always kept.
       - Seasonal filter removes ONLY winter-zero rows (keeps summer absences
         and winter catches — essential for presence/absence SDM)
       - Pivot by site ID only; coordinates attached once per site
-    Expects canonical column names: Species, SampleQuantity, IDMOH,
-    SampleVisitDate, PointXITM, PointYITM (samples) and
-    SiteIDMOH, SiteLatitude, SiteLongitude (sites).
+    Canonical columns: Species (pivot), optional PestGroup (filter),
+    SampleQuantity, IDMOH, SampleVisitDate, PointXITM, PointYITM (samples)
+    and SiteIDMOH, SiteLatitude, SiteLongitude (sites).
     """
     log = []
     df = samples_df.copy()
 
-    # Step 1 – keep Phlebotomus (by species name) + ND
+    # Step 1 – keep Phlebotomus + ND
     log.append(('info', f"Step 1 · Raw samples rows: {len(df):,}"))
     if 'Species' not in df.columns:
         log.append(('warn', "Step 1 · No 'Species' column – cannot filter"))
         return None, log
-    sp = df['Species'].astype(str)
-    mask_phlebo = (
-        sp.str.startswith("P ") |
-        sp.str.startswith("P.") |
-        sp.str.strip().eq("ND")
-    )
+
+    use_group = bool(group_col) and group_col in df.columns
+    spc = df['Species'].astype(str).str.strip()
+    is_nd = spc.str.upper().eq("ND")
+
+    if use_group:
+        grp = (df[group_col].astype(str).str.strip()
+               .str.replace(r'\s+', ' ', regex=True).str.lower())
+        # mark ND also via the group column (undetermined catches)
+        is_nd = is_nd | grp.eq("nd")
+        mask_phlebo = grp.eq("phlebotomus") | is_nd
+        # ensure ND-marked rows carry 'ND' as their species for downstream steps
+        sp_blank = df['Species'].isna() | (spc == "") | spc.str.lower().eq("nan")
+        df.loc[grp.eq("nd") & sp_blank, 'Species'] = "ND"
+        log_label = f"Step 1 · Kept '{group_col}' = Phlebotomus + ND: {{}} rows"
+    else:
+        mask_phlebo = (
+            df['Species'].astype(str).str.startswith("P ") |
+            df['Species'].astype(str).str.startswith("P.") |
+            is_nd
+        )
+        log_label = "Step 1 · Kept species starting with 'P' + ND: {} rows"
+
     df = df[mask_phlebo].copy()
-    log.append(('ok', f"Step 1 · Kept species starting with 'P' + ND: {len(df):,} rows"))
+    log.append(('ok', log_label.format(f"{len(df):,}")))
 
     # Step 2 – select fields
     keep = ['Species', 'SampleQuantity', 'IDMOH', 'SampleVisitDate', 'PointXITM', 'PointYITM']
@@ -379,9 +398,10 @@ def run_pipeline(samples_df, sites_df, drop_nd, zero_serg):
         if pd.isna(name):
             return name
         name = str(name).strip()
-        name = re.sub(r'\s+', ' ', name)        # collapse multiple spaces
-        name = re.sub(r'^P\.?\s*', 'P ', name)  # unify "P." / "P" prefix to "P "
-        return name
+        name = re.sub(r'\s+', ' ', name)          # collapse multiple spaces
+        name = re.sub(r'^P\.\s*', 'P ', name)     # "P." / "P. " -> "P "
+        name = re.sub(r'^P\s+', 'P ', name)       # normalise abbreviated prefix only
+        return name                                # full names (e.g. "Phlebotomus …") untouched
     df['Species'] = df['Species'].apply(clean_species)
     uniq = sorted([str(x) for x in df['Species'].dropna().unique()])
     log.append(('ok', f"Step 5 · Species cleaned; {len(uniq)} unique"))
@@ -480,29 +500,49 @@ if can_run:
     # Auto-detect column mapping
     smap = detect_map(list(samples_raw.columns), SAMPLE_ALIASES)
     tmap = detect_map(list(sites_raw.columns), SITE_ALIASES)
-
-    # Let user confirm the Species column (the whole filter depends on it)
     raw_cols = list(samples_raw.columns)
-    species_guess = [r for r, c in smap.items() if c == 'Species']
+
+    # --- Pest-group column (used to SELECT Phlebotomus): default SamplePestGroup ---
+    NONE = "— none (filter by species name) —"
+    grp_guess = [c for c in raw_cols if "pestgroup" in _norm(c).replace(" ", "")]
+    grp_options = [NONE] + raw_cols
+    grp_default = grp_options.index(grp_guess[0]) if grp_guess else 0
+
+    # --- Species column (used to BUILD the matrix / pivot) ---
+    species_guess = ([r for r, c in smap.items() if c == 'Species'] or
+                     [c for c in raw_cols if "species" in _norm(c) or _norm(c) == "מין"])
     sp_default = raw_cols.index(species_guess[0]) if species_guess else 0
-    sel_col, _ = st.columns([1, 2])
-    with sel_col:
+
+    c_grp, c_sp = st.columns(2)
+    with c_grp:
+        group_choice = st.selectbox(
+            "🪲 Pest-group column (filter)",
+            options=grp_options,
+            index=grp_default,
+            help="Rows kept where this equals 'Phlebotomus' (+ ND). "
+                 "Choose 'none' if your file has species names only (e.g. 'P papatasi')."
+        )
+    with c_sp:
         species_choice = st.selectbox(
-            "🔎 Species column",
+            "🔎 Species column (matrix)",
             options=raw_cols,
             index=sp_default,
-            help="Column holding species names (Phlebotomus filter keys off this)."
+            help="Column whose values become the species columns of the matrix."
         )
 
-    # Build final rename maps (force chosen species column → 'Species')
-    sample_rename = {r: c for r, c in smap.items() if c != 'Species'}
+    group_col = None if group_choice == NONE else 'PestGroup'
+
+    # Build final rename map: force chosen species → 'Species', chosen group → 'PestGroup'
+    sample_rename = {r: c for r, c in smap.items() if c not in ('Species',)}
     sample_rename[species_choice] = 'Species'
+    if group_col:
+        sample_rename[group_choice] = 'PestGroup'
     samples_canon = samples_raw.rename(columns=sample_rename)
     sites_canon   = sites_raw.rename(columns=tmap)
 
     # Show detected mapping
     detected = ", ".join(f"{c} ← {r}" for r, c in sample_rename.items())
-    st.markdown(f'<div class="info-box">🧭 Detected columns: {detected}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="info-box">🧭 Column mapping: {detected}</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">⚙️ Run Pipeline</div>', unsafe_allow_html=True)
     st.caption("⏱ First run may take 1–2 minutes depending on file size. Subsequent runs are instant.")
@@ -510,6 +550,7 @@ if can_run:
         result_df, log_entries = run_pipeline(
             samples_canon, sites_canon,
             drop_nd=drop_nd_only, zero_serg=zero_sergentomyia,
+            group_col=group_col,
         )
         st.session_state["result_df"]   = result_df
         st.session_state["log_entries"] = log_entries
