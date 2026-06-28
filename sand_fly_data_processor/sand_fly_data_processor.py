@@ -502,11 +502,15 @@ if can_run:
     tmap = detect_map(list(sites_raw.columns), SITE_ALIASES)
     raw_cols = list(samples_raw.columns)
 
-    # --- Pest-group column (used to SELECT Phlebotomus): default SamplePestGroup ---
-    NONE = "— none (filter by species name) —"
-    grp_guess = [c for c in raw_cols if "pestgroup" in _norm(c).replace(" ", "")]
+    # --- Pest-group column (used to SELECT Phlebotomus) ---
+    # Default = 'none' → filter by species name (P* + ND) on the Species column.
+    # This reproduces the clean validated matrix. Pick a pest-group column only
+    # if you want to keep Sergentomyia / restrict ND to the sandfly survey context
+    # (note: that also pulls in host/junk rows that must be cleaned afterwards).
+    NONE = "— none (filter by species name: P* + ND) —"
+    grp_detected = [c for c in raw_cols if "pestgroup" in _norm(c).replace(" ", "")]
     grp_options = [NONE] + raw_cols
-    grp_default = grp_options.index(grp_guess[0]) if grp_guess else 0
+    grp_default = 0  # always default to the species-name filter (clean output)
 
     # --- Species column (used to BUILD the matrix / pivot) ---
     species_guess = ([r for r, c in smap.items() if c == 'Species'] or
@@ -519,8 +523,9 @@ if can_run:
             "🪲 Pest-group column (filter)",
             options=grp_options,
             index=grp_default,
-            help="Rows kept where this equals 'Phlebotomus' (+ ND). "
-                 "Choose 'none' if your file has species names only (e.g. 'P papatasi')."
+            help="Default 'none' = filter Phlebotomus by species name (P* + ND) — "
+                 "clean output. Pick a column (e.g. SamplePestGroup) only to keep "
+                 "Sergentomyia, at the cost of host/junk species columns."
         )
     with c_sp:
         species_choice = st.selectbox(
