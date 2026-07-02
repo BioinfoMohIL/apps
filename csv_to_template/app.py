@@ -26,6 +26,7 @@ RENAME_MAP = {
     "Point X ITM"         : "Point X ITM",
     "Point Y ITM"         : "Point Y ITM",
     "מזהה נקודה"          : "מזהה נקודת ניטור",
+    "שם פקח"              : "שם דוגם",
 }
 
 # ── Final column order (matches template row 1) ──────────────────────────────
@@ -54,7 +55,6 @@ OUTPUT_COLUMNS = [
 
 # Blue columns: always empty (header only)
 BLUE_COLUMNS = {
-    "שם דוגם",
     "Sent/ Received at Sheba",
     "Date mosquitoes homogenized",
     "Date RNA extracted",
@@ -177,4 +177,4 @@ with st.expander("ℹ️ Column mapping"):
     for col in sorted(BLUE_COLUMNS):
         st.markdown(f"- `{col}`")
     st.markdown("**Columns dropped from CSV**")
-    st.markdown("- `OBJECTID`, `GlobalID`, `מזהה קופסה`, `שם בודק`, `שם פקח`")
+    st.markdown("- `OBJECTID`, `GlobalID`, `מזהה קופסה`, `שם בודק`")
