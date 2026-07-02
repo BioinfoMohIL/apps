@@ -1,7 +1,7 @@
 """
 app.py – CSV → Template XLSX converter
-Dépendances : streamlit, xlsxwriter
-Aucune dépendance à pandas ou openpyxl.
+Dependencies: streamlit, xlsxwriter
+No pandas or openpyxl required.
 """
 
 import csv
@@ -10,7 +10,7 @@ from datetime import datetime
 import streamlit as st
 import xlsxwriter
 
-# ── Mapping CSV col → nom final ──────────────────────────────────────────────
+# ── Column mapping: CSV name → final output name ─────────────────────────────
 RENAME_MAP = {
     "WNV No."             : "WNV No.",
     "מיקום מבחנה בקופסה" : "מיקום מבחנה בקופסה",
@@ -28,7 +28,7 @@ RENAME_MAP = {
     "מזהה נקודה"          : "מזהה נקודת ניטור",
 }
 
-# ── Ordre final des colonnes (identique au template) ─────────────────────────
+# ── Final column order (matches template row 1) ──────────────────────────────
 OUTPUT_COLUMNS = [
     "WNV No.",
     "מיקום מבחנה בקופסה",
@@ -52,7 +52,7 @@ OUTPUT_COLUMNS = [
     "Result RT-PCR (Lin1+2)",
 ]
 
-# Colonnes bleues : toujours vides (en-tête seulement)
+# Blue columns: always empty (header only)
 BLUE_COLUMNS = {
     "שם דוגם",
     "Sent/ Received at Sheba",
@@ -64,8 +64,8 @@ BLUE_COLUMNS = {
 
 
 def read_csv(file_bytes: bytes) -> tuple[list[str], list[dict]]:
-    """Lit le CSV et retourne (headers, rows_as_dicts)."""
-    text = file_bytes.decode("utf-8-sig")  # gère le BOM éventuel
+    """Read CSV bytes and return (headers, rows_as_dicts)."""
+    text = file_bytes.decode("utf-8-sig")  # handles optional BOM
     reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
     headers = reader.fieldnames or []
@@ -73,7 +73,7 @@ def read_csv(file_bytes: bytes) -> tuple[list[str], list[dict]]:
 
 
 def build_xlsx(rows: list[dict]) -> bytes:
-    """Construit le fichier XLSX en mémoire et retourne les bytes."""
+    """Build the XLSX file in memory and return bytes."""
     output = io.BytesIO()
     wb = xlsxwriter.Workbook(output, {"in_memory": True})
     ws = wb.add_worksheet("Sheet1")
@@ -105,7 +105,7 @@ def build_xlsx(rows: list[dict]) -> bytes:
     return output.getvalue()
 
 
-# ── UI Streamlit ──────────────────────────────────────────────────────────────
+# ── Streamlit UI ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="CSV → Template RUN",
     page_icon="🦟",
@@ -120,12 +120,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🦟 CSV → Template RUN")
-st.caption("Convertit l'export système au format TEMPLATE FOR RUN")
+st.caption("Converts the system CSV export to the TEMPLATE FOR RUN format")
 
 uploaded = st.file_uploader(
-    "Déposez le fichier CSV exporté du système",
+    "Drop the CSV file exported from the system",
     type=["csv"],
-    help="Fichier du type SitesVisitsSamples2021_....csv",
+    help="File of the type SitesVisitsSamples2021_....csv",
 )
 
 if uploaded:
@@ -138,23 +138,23 @@ if uploaded:
         missing = known - set(headers)
 
         col1, col2 = st.columns(2)
-        col1.metric("Lignes détectées", len(rows))
-        col2.metric("Colonnes mappées", f"{len(found)} / {len(RENAME_MAP)}")
+        col1.metric("Rows detected", len(rows))
+        col2.metric("Columns mapped", f"{len(found)} / {len(RENAME_MAP)}")
 
         if missing:
-            st.warning(f"Colonnes attendues mais absentes du CSV : {', '.join(missing)}")
+            st.warning(f"Expected columns not found in CSV: {', '.join(missing)}")
 
-        with st.spinner("Génération du fichier Excel…"):
+        with st.spinner("Generating Excel file…"):
             xlsx_bytes = build_xlsx(rows)
 
-        # Nom de sortie avec timestamp
+        # Output filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_name  = f"sending_file_template_{timestamp}.xlsx"
 
-        st.success(f"✅ Fichier prêt — {len(rows)} lignes, {len(OUTPUT_COLUMNS)} colonnes")
+        st.success(f"✅ File ready — {len(rows)} rows, {len(OUTPUT_COLUMNS)} columns")
 
         st.download_button(
-            label="⬇️ Télécharger le fichier Excel",
+            label="⬇️ Download Excel file",
             data=xlsx_bytes,
             file_name=out_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -163,18 +163,18 @@ if uploaded:
         )
 
     except Exception as e:
-        st.error(f"Erreur lors du traitement : {e}")
+        st.error(f"Error while processing: {e}")
         st.exception(e)
 else:
-    st.info("👆 Chargez un fichier CSV pour commencer")
+    st.info("👆 Upload a CSV file to get started")
 
-with st.expander("ℹ️ Mapping des colonnes"):
-    st.markdown("**Colonnes renommées (jaune)**")
+with st.expander("ℹ️ Column mapping"):
+    st.markdown("**Renamed columns (yellow)**")
     for src, dst in RENAME_MAP.items():
         if src != dst:
             st.markdown(f"- `{src}` → `{dst}`")
-    st.markdown("**Colonnes ajoutées vides (bleu)**")
+    st.markdown("**Empty columns added (blue)**")
     for col in sorted(BLUE_COLUMNS):
         st.markdown(f"- `{col}`")
-    st.markdown("**Colonnes ignorées du CSV**")
+    st.markdown("**Columns dropped from CSV**")
     st.markdown("- `OBJECTID`, `GlobalID`, `מזהה קופסה`, `שם בודק`, `שם פקח`")
