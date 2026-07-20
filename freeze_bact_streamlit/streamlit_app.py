@@ -26,6 +26,51 @@ import freeze_bact_v2 as engine_v2
 
 ENGINES = {"v2": engine_v2, "v1": engine_v1}
 
+
+def parse_tofreeze_sheet(raw_df, engine):
+    """Turn the raw ToFreeze sheet (title rows, repeated headers, blank
+    separators all interleaved in the same columns) into:
+    - a tidy DataFrame of real sample rows only, with a 'Category' column
+    - a small summary DataFrame of Needed/Found/Added per category
+    """
+    rows = raw_df.values.tolist()
+    if not rows:
+        return pd.DataFrame(), pd.DataFrame()
+
+    headers = [str(h) if h is not None else "" for h in rows[0]]
+    titles = set(engine.TITLES)
+
+    clean_rows = []
+    summary_rows = []
+    current_category = None
+
+    for row in rows[1:]:
+        if all(pd.isna(v) or (isinstance(v, str) and v.strip() == "") for v in row):
+            continue  # blank separator row
+
+        first = row[0]
+        if not pd.isna(first) and first in titles:
+            current_category = first
+            needed = row[1] if len(row) > 1 else None
+            found = row[2] if len(row) > 2 else None
+            added = row[3] if len(row) > 3 else None
+            summary_rows.append({
+                "Category": first,
+                "Needed": needed if not pd.isna(needed) else "—",
+                "Found": found if not pd.isna(found) else "—",
+                "Added": added if not pd.isna(added) else "—",
+            })
+            continue
+
+        if not pd.isna(first) and first == headers[0] and len(row) > 1 and row[1] == headers[1]:
+            continue  # repeated header row
+
+        clean_rows.append([current_category] + list(row))
+
+    clean_df = pd.DataFrame(clean_rows, columns=["Category"] + headers)
+    summary_df = pd.DataFrame(summary_rows)
+    return clean_df, summary_df
+
 st.set_page_config(page_title="Freeze Bact", page_icon="🧊", layout="wide")
 
 # ---------------------------------------------------------------------------
@@ -144,10 +189,13 @@ if run_clicked:
         sheets = pd.read_excel(output_path, sheet_name=None, header=None)
         test_results = pd.read_excel(output_path, sheet_name="TestResults")
         n_selected = int((test_results["Test Result"] == "yes").sum())
+        clean_df, summary_df = parse_tofreeze_sheet(sheets["ToFreeze"], engine)
 
         st.session_state.result = {
             "output_path": output_path,
             "sheets": sheets,
+            "clean_df": clean_df,
+            "summary_df": summary_df,
             "test_results": test_results,
             "logs": log_buffer.getvalue(),
             "n_selected": n_selected,
@@ -174,8 +222,15 @@ if result:
     tab_freeze, tab_tests, tab_logs = st.tabs(["📋 ToFreeze", "🧪 TestResults", "📝 Log"])
 
     with tab_freeze:
-        st.caption("Raw preview of the ToFreeze sheet (section titles + tables).")
-        st.dataframe(result["sheets"]["ToFreeze"], use_container_width=True, height=500)
+        if not result["summary_df"].empty:
+            st.caption("Needed / Found / Added per category (categories without a target take all matching samples).")
+            st.dataframe(result["summary_df"], use_container_width=True, hide_index=True)
+
+        st.caption("Selected samples, one row per sample.")
+        st.dataframe(result["clean_df"], use_container_width=True, height=450)
+
+        with st.expander("Raw sheet (as exported, with section titles)"):
+            st.dataframe(result["sheets"]["ToFreeze"], use_container_width=True, height=400)
 
     with tab_tests:
         st.dataframe(result["test_results"], use_container_width=True, height=500)
