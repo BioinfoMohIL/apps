@@ -152,7 +152,6 @@ code, pre, .stCode, [data-testid="stMetricValue"] {
 }
 
 section[data-testid="stSidebar"] {
-    background: #ffffff;
     border-right: 1px solid var(--seq-border);
 }
 section[data-testid="stSidebar"] h2 {
