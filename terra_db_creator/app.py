@@ -266,7 +266,7 @@ st.markdown(
     """
     <div class="seq-hero">
         <h1>🧬 Terra DB Creator</h1>
-        <p>Turns an Illumina SampleSheet into a <code>seq_data</code> entity table ready to import into Terra —
+        <p>Turns an Illumina SampleSheet into a <code>database</code> entity table ready to import into Terra —
     </div>
     """,
     unsafe_allow_html=True,
