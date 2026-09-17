@@ -1,5 +1,5 @@
 """
-Create Seq Data Table — Streamlit app
+Terra DB Creator — Streamlit app
 
 Reimplements the logic of app_create_seq_data_bs.ps1 + create_seq_data_table.py.
 
@@ -19,7 +19,7 @@ import streamlit as st
 # Config & constants (carried over as-is from create_seq_data_table.py)
 # --------------------------------------------------------------------------
 
-st.set_page_config(page_title="Create Seq Data Table", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="Terra DB Creator", page_icon="🧬", layout="wide")
 
 SPECIES = {
     "SH": "Salmonella",
@@ -265,9 +265,8 @@ def build_output_df(rows, db_name, facility, platform, sending_date, run_date):
 st.markdown(
     """
     <div class="seq-hero">
-        <h1>🧬 Create Seq Data Table</h1>
+        <h1>🧬 Terra DB Creator</h1>
         <p>Turns an Illumina SampleSheet into a <code>seq_data</code> entity table ready to import into Terra —
-        the web equivalent of <code>app_create_seq_data_bs.ps1</code> → <code>create_seq_data_table.py</code>.</p>
     </div>
     """,
     unsafe_allow_html=True,
