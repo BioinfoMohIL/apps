@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 streamlit==1.61.0
 starlette==0.46.2
+=======
+>>>>>>> cf3cf5b (change starlette v)
 pandas>=2.0
 openpyxl>=3.1
 xlrd>=2.0
+streamlit==1.61.0
+starlette==0.46.2
