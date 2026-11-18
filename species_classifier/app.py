@@ -47,7 +47,9 @@ def get_model_path():
     ap.add_argument("--model")
     ap.add_argument("--threshold", type=float)
     a, _ = ap.parse_known_args(sys.argv[1:])
-    return (a.model or os.environ.get("STRAIN_MODEL", "strain_model.pkl")), a.threshold
+    # par défaut: à côté de app.py (sur le cloud, le dossier courant est la racine du repo)
+    default = str(Path(__file__).with_name("strain_model.pkl"))
+    return (a.model or os.environ.get("STRAIN_MODEL", default)), a.threshold
 
 
 MODEL_PATH, THRESHOLD_OVERRIDE = get_model_path()
