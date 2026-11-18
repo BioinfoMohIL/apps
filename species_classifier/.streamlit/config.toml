@@ -1,0 +1,13 @@
+[server]
+maxUploadSize = 1000        # Mo par fichier (défaut 200) - à aligner avec le proxy/cloud
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0d9488"
+backgroundColor = "#f7fbfc"
+secondaryBackgroundColor = "#e8f3f5"
+textColor = "#0a1628"
