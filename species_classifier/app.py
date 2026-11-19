@@ -27,6 +27,7 @@ def log(msg):
 
 
 MAX_SAMPLES = int(os.environ.get("STRAIN_MAX_SAMPLES", 4))  # limite de samples par run
+MAX_TOTAL_MB = int(os.environ.get("STRAIN_MAX_TOTAL_MB", 600))  # taille totale des uploads par run
 
 st.set_page_config(page_title="Species Classifier", page_icon="🧬", layout="wide")
 
@@ -110,11 +111,23 @@ with st.sidebar:
     )
     st.caption(f"Model default: {bundle['threshold']:.2f}")
     st.write(f"**Max samples per run:** {MAX_SAMPLES}")
+    st.write(f"**Max total upload:** {MAX_TOTAL_MB} MB")
 
 files = st.file_uploader(
     "Upload FASTQ files (R1 + R2 per sample, `.fastq`, `.fq` or `.gz`)",
     type=["fastq", "fq", "gz"], accept_multiple_files=True,
 )
+
+st.caption("Files too large? Keep only the first reads with `python trim_reads.py reads_dir/ -n 200000` "
+           "— same prediction, much smaller upload.")
+
+if files:
+    total_mb = sum(f.size for f in files) / 1e6
+    st.caption(f"{len(files)} file(s) · {total_mb:.0f} MB")
+    if total_mb > MAX_TOTAL_MB:
+        st.error(f"Total upload is {total_mb:.0f} MB, above the {MAX_TOTAL_MB} MB limit of this server. "
+                 "Upload fewer samples, or shrink them first with trim_reads.py.")
+        st.stop()
 
 if files and st.button("Analyze", type="primary"):
     try:
