@@ -7,9 +7,11 @@ Lancement:
 """
 import argparse
 import os
+import resource
 import shutil
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 import pandas as pd
@@ -17,6 +19,12 @@ import streamlit as st
 
 from kmer_utils import find_pairs
 from strain_predict import MIN_READS_WARN, load_bundle, predict_folder
+
+def log(msg):
+    """Log visible dans 'Manage app' (stderr), avec le pic de RAM du process."""
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    print(f"[app] {msg} (peak RAM {rss:.0f} MB)", file=sys.stderr, flush=True)
+
 
 MAX_SAMPLES = int(os.environ.get("STRAIN_MAX_SAMPLES", 4))  # limite de samples par run
 
@@ -109,28 +117,40 @@ files = st.file_uploader(
 )
 
 if files and st.button("Analyze", type="primary"):
-    with tempfile.TemporaryDirectory() as tmp:
-        save_uploads(files, tmp)
-        pairs = find_pairs(tmp)
-        paired_names = {Path(p).name for _, r1, r2 in pairs for p in (r1, r2)}
-        orphans = sorted({f.name for f in files} - paired_names)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            log("saving: " + ", ".join(f"{f.name}={f.size / 1e6:.0f}MB" for f in files))
+            save_uploads(files, tmp)
+            pairs = find_pairs(tmp)
+            paired_names = {Path(p).name for _, r1, r2 in pairs for p in (r1, r2)}
+            orphans = sorted({f.name for f in files} - paired_names)
+            log(f"{len(pairs)} pair(s) found, {len(orphans)} orphan file(s)")
 
-        if orphans:
-            st.warning("No R1/R2 mate found for: " + ", ".join(orphans)
-                       + " — these files were ignored.")
-        if not pairs:
-            st.error("No complete R1/R2 pair detected. Check the file names (R1/R2).")
-            st.stop()
-        if len(pairs) > MAX_SAMPLES:
-            st.error(f"{len(pairs)} samples uploaded, max is {MAX_SAMPLES}. Split into several runs.")
-            st.stop()
+            if orphans:
+                st.warning("No R1/R2 mate found for: " + ", ".join(orphans)
+                           + " — these files were ignored.")
+            if not pairs:
+                st.error("No complete R1/R2 pair detected. Check the file names (R1/R2).")
+                st.stop()
+            if len(pairs) > MAX_SAMPLES:
+                st.error(f"{len(pairs)} samples uploaded, max is {MAX_SAMPLES}. Split into several runs.")
+                st.stop()
 
-        bar = st.progress(0.0, text="Starting…")
-        df = predict_folder(
-            tmp, bundle, threshold,
-            on_sample=lambda i, n, row: bar.progress(i / n, text=f"{i}/{n} — {row['sample']}"),
-        )
-        bar.empty()
+            bar = st.progress(0.0, text="Starting…")
+
+            def on_sample(i, n, row):
+                log(f"sample {i}/{n} {row['sample']}: {row['predicted']} ({row.get('qc')})")
+                bar.progress(i / n, text=f"{i}/{n} — {row['sample']}")
+
+            df = predict_folder(tmp, bundle, threshold, on_sample=on_sample)
+            bar.empty()
+        log("analysis done")
+    except Exception as e:  # st.stop() n'est pas une Exception, donc pas attrapé ici
+        log(f"FAILED: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        st.error(f"Analysis failed: {type(e).__name__}: {e}")
+        st.code(traceback.format_exc())
+        st.stop()
     st.session_state["results"] = df  # survit aux reruns (ex: clic sur download)
 
 df = st.session_state.get("results")
